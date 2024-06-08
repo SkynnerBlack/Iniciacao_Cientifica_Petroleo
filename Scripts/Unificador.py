@@ -2,6 +2,7 @@
 
 import pandas as pd
 import os
+import re
 
 # 0.1. Construindo a Path dos insumos 
 
@@ -99,7 +100,7 @@ for df_name, df in dict_combustivel_automotivo.items():
     # Agrupar por data e tipo de produto, e calcular a média dos valores
     for produto in ['GASOLINA', 'ETANOL', 'DIESEL']:
         temp_df = df[df['Produto'] == produto].groupby('Data da Coleta')['Valor de Venda'].mean().reset_index()
-        temp_df.columns = ['Data da Coleta', f'Valor de Venda {produto.capitalize()}']
+        temp_df.columns = ['Data da Coleta', f'Valor de Venda {produto.capitalize()} (p/L)']
         
         if summarized_df.empty:
             summarized_df = temp_df
@@ -141,10 +142,94 @@ for df_name, df in dict_GLP_P13.items():
     # Armazenar o DataFrame sumarizado no novo dicionário
     dict_GLP_sumarizado[sumarized_file_name] = summarized_df
 
-# 2.2. Tratando as bases de GLP P13
+# 2.2. Tratando as bases de Cotacao dolar
+
+dict_cotacao_sumarizado = {}
+
+for df_name, df in dict_Cotacao_dolar.items():
+    # Cria o nome do arquivo sumarizado com base no nome original
+    sumarized_file_name = (df_name.split("202")[0] + "sumarizado 202" + df_name.split("202")[1])
+
+    # Transpor o DataFrame
+    df = df.transpose()
+
+    # Inserir a primeira linha com os nomes originais das colunas
+    df.insert(0, 'Variável', df.index)
+
+    # Resetar os índices
+    df.reset_index(drop=True, inplace=True)
+
+    # Transpor o DataFrame
+    df = df.transpose()
+    
+    # Selecionando as colunas 
+    summarized_df = df[[0, 4, 5]]
+
+    # Renomeando as colunas
+    summarized_df = summarized_df.rename(columns={0: 'Data da Coleta', 
+                                                  4: 'Cotações em Real (Compra)', 
+                                                  5: 'Cotações em Real (Venda)'})
+    
+    # Resetar o índice das linhas
+    summarized_df.reset_index(drop=True, inplace=True)
+
+    # Transformando a coluna "Data de Coleta em string"
+    summarized_df['Data da Coleta'] = summarized_df['Data da Coleta'].astype(str)
+
+    # Adicionar um zero no começo da coluna "Data de Coleta" se estiver com 7 dígitos
+    summarized_df['Data da Coleta'] = summarized_df['Data da Coleta'].apply(lambda x: '0' + x if len(x) == 7 else x)
+
+
+    # Convertendo a data para o formato AAAAMMDD
+    summarized_df['Data da Coleta'] = pd.to_datetime(summarized_df['Data da Coleta'], errors='coerce', format='%d%m%Y').dt.strftime('%Y%m%d')
+
+    # Convertendo e limpando dados de cotações
+    summarized_df['Cotações em Real (Compra)'] = summarized_df['Cotações em Real (Compra)'].str.replace(',', '.').astype(float)
+    summarized_df['Cotações em Real (Venda)'] = summarized_df['Cotações em Real (Venda)'].str.replace(',', '.').astype(float)
+
+    # Armazenar o DataFrame sumarizado no novo dicionário
+    dict_cotacao_sumarizado[sumarized_file_name] = summarized_df
 
 # 2.3. Tratando as bases de de PETR
+dict_PETR_sumarizado = {}
 
+for df_name, df in dict_PETR.items():
+
+    sumarized_file_name = (df_name + " sumarizado")
+
+    # Renomear as colunas pela posição, pq seus nomes estão "quebrados"
+    df.columns.values[0] = f"Data da Coleta"
+    df.columns.values[1] = f"Fechamento {df_name} (em Reais)"
+    df.columns.values[5] = f"Volume de transações {df_name} (Em milhares)"
+    
+    # Selecionando as colunas necessárias
+    summarized_df = df[[f"Data da Coleta", 
+                        f"Fechamento {df_name} (em Reais)", 
+                        f"Volume de transações {df_name} (Em milhares)"]]
+
+    # Formatação da coluna "Data da Coleta"
+    summarized_df["Data da Coleta"] = pd.to_datetime(summarized_df["Data da Coleta"], format="%d.%m.%Y").dt.strftime("%Y%m%d")
+
+    # Remover letras e converter a coluna "Volume de transações" para float
+    summarized_df[f"Volume de transações {df_name} (Em milhares)"] = (
+        summarized_df[f"Volume de transações {df_name} (Em milhares)"]
+        .str.replace(r'[^\d,]', '', regex=True)  # Remove letras
+        .str.replace(',', '.')  # Troca vírgula por ponto
+        .astype(float)  # Converte para float
+    )
+
+    # Converter a coluna "Fechamento {df_name} (em Reais)" para float
+    summarized_df[f"Fechamento {df_name} (em Reais)"] = (
+        summarized_df[f"Fechamento {df_name} (em Reais)"]
+        .str.replace(',', '.')  # Troca vírgula por ponto
+        .astype(float)  # Converte para float
+    )
+
+    # Armazenar o DataFrame sumarizado no novo dicionário
+    dict_PETR_sumarizado[sumarized_file_name] = summarized_df
+    
 # 3.0. Unindo todas as bases em um só aglomerado
 
 # 3.1. Retirando as linhas que contém algum valor nulo
+
+# 3.2. Exportando o dataframe final para um excel
