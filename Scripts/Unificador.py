@@ -168,8 +168,8 @@ for df_name, df in dict_Cotacao_dolar.items():
 
     # Renomeando as colunas
     summarized_df = summarized_df.rename(columns={0: 'Data da Coleta', 
-                                                  4: 'Cotações em Real (Compra)', 
-                                                  5: 'Cotações em Real (Venda)'})
+                                                  4: 'Cotação Dolar em Real (Compra)', 
+                                                  5: 'Cotação Dolar em Real (Venda)'})
     
     # Resetar o índice das linhas
     summarized_df.reset_index(drop=True, inplace=True)
@@ -185,8 +185,8 @@ for df_name, df in dict_Cotacao_dolar.items():
     summarized_df['Data da Coleta'] = pd.to_datetime(summarized_df['Data da Coleta'], errors='coerce', format='%d%m%Y').dt.strftime('%Y%m%d')
 
     # Convertendo e limpando dados de cotações
-    summarized_df['Cotações em Real (Compra)'] = summarized_df['Cotações em Real (Compra)'].str.replace(',', '.').astype(float)
-    summarized_df['Cotações em Real (Venda)'] = summarized_df['Cotações em Real (Venda)'].str.replace(',', '.').astype(float)
+    summarized_df['Cotação Dolar em Real (Compra)'] = summarized_df['Cotação Dolar em Real (Compra)'].str.replace(',', '.').astype(float)
+    summarized_df['Cotação Dolar em Real (Venda)'] = summarized_df['Cotação Dolar em Real (Venda)'].str.replace(',', '.').astype(float)
 
     # Armazenar o DataFrame sumarizado no novo dicionário
     dict_cotacao_sumarizado[sumarized_file_name] = summarized_df
