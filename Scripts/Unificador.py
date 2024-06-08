@@ -4,13 +4,14 @@ import pandas as pd
 import os
 import re
 
-# 0.1. Construindo a Path dos insumos 
+# 0.1. Construindo as paths de input e output
 
 script_path = os.path.abspath(__file__)
 cutting_string = "Scripts\\"
 
 partes = script_path.split(cutting_string)
 path_insumos = partes[0] + "Insumos\\Bruto (v1)"
+path_output = partes[0] + "Insumos\\Semi-tratado (v2)"
 
 # 1.0. Importando os datasets de Combustivel automotivo
 
@@ -195,7 +196,7 @@ dict_PETR_sumarizado = {}
 
 for df_name, df in dict_PETR.items():
 
-    sumarized_file_name = (df_name + " sumarizado")
+    sumarized_file_name = (df_name + " - sumarizado")
 
     # Renomear as colunas pela posição, pq seus nomes estão "quebrados"
     df.columns.values[0] = f"Data da Coleta"
@@ -228,8 +229,47 @@ for df_name, df in dict_PETR.items():
     # Armazenar o DataFrame sumarizado no novo dicionário
     dict_PETR_sumarizado[sumarized_file_name] = summarized_df
     
-# 3.0. Unindo todas as bases em um só aglomerado
+# 3.0. Concatenando todos os dataframes verticalmente
 
-# 3.1. Retirando as linhas que contém algum valor nulo
+df_combustivel_concatenado = pd.concat(dict_combustivel_sumarizado.values())
+df_combustivel_concatenado = df_combustivel_concatenado.sort_values(by='Data da Coleta', ascending=True)
 
-# 3.2. Exportando o dataframe final para um excel
+df_GLP_concatenado = pd.concat(dict_GLP_sumarizado.values())
+df_GLP_concatenado = df_GLP_concatenado.sort_values(by='Data da Coleta', ascending=True)
+
+df_cotacao_concatenado = pd.concat(dict_cotacao_sumarizado.values())
+df_cotacao_concatenado = df_cotacao_concatenado.sort_values(by='Data da Coleta', ascending=True)
+
+# 3.1. Tornando tudo em um só DataFrame
+
+# Criando um DataFrame com o intervalo completo de datas
+datas = pd.date_range(start="2020-01-01", end="2023-12-31", freq='D')
+df_datas = pd.DataFrame(datas, columns=["Data da Coleta"])
+
+# Convertendo a coluna de datas do DataFrame base para string, para correspondência
+df_datas['Data da Coleta'] = df_datas['Data da Coleta'].dt.strftime('%Y%m%d')
+
+# Converter a coluna 'Data da Coleta' de string para datetime em cada DataFrame
+df_combustivel_concatenado['Data da Coleta'] = pd.to_datetime(df_combustivel_concatenado['Data da Coleta'], format='%Y%m%d')
+df_GLP_concatenado['Data da Coleta'] = pd.to_datetime(df_GLP_concatenado['Data da Coleta'], format='%Y%m%d')
+df_cotacao_concatenado['Data da Coleta'] = pd.to_datetime(df_cotacao_concatenado['Data da Coleta'], format='%Y%m%d')
+dict_PETR_sumarizado['PETR3 - sumarizado']['Data da Coleta'] = pd.to_datetime(dict_PETR_sumarizado['PETR3 - sumarizado']['Data da Coleta'], format='%Y%m%d')
+dict_PETR_sumarizado['PETR4 - sumarizado']['Data da Coleta'] = pd.to_datetime(dict_PETR_sumarizado['PETR4 - sumarizado']['Data da Coleta'], format='%Y%m%d')
+
+# Convertendo de volta para string após alinhar os formatos
+for df in [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, dict_PETR_sumarizado['PETR3 - sumarizado'], dict_PETR_sumarizado['PETR4 - sumarizado']]:
+    df['Data da Coleta'] = df['Data da Coleta'].dt.strftime('%Y%m%d')
+
+# Realizando a concatenação horizontal com merge
+dfs = [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, dict_PETR_sumarizado['PETR3 - sumarizado'], dict_PETR_sumarizado['PETR4 - sumarizado']]
+df_final = df_datas
+
+for df in dfs:
+    df_final = pd.merge(df_final, df, on='Data da Coleta', how='left')
+
+# Verifique o resultado
+print(df_final.head())
+
+# 3.1. Exportando o dataframe final para um excel
+
+df_final.to_excel(path_output + "\\Semitratado.xlsx", index=False)
