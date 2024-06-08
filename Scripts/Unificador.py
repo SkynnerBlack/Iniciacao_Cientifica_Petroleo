@@ -135,7 +135,7 @@ for df_name, df in dict_GLP_P13.items():
 
     # Retornando a média dos Valores de venda agrupador por dia
     summarized_df = summarized_df.groupby('Data da Coleta')['Valor de Venda'].mean().reset_index()
-    summarized_df.rename(columns={'Valor de Venda': 'Valor de Venda (p/13kg)'}, inplace=True)
+    summarized_df.rename(columns={'Valor de Venda': 'Valor de Venda GLP (p/13kg)'}, inplace=True)
 
     # Ordenar o DataFrame final por data
     summarized_df.sort_values(by='Data da Coleta', inplace=True)
