@@ -13,6 +13,8 @@ partes = script_path.split(cutting_string)
 path_insumos = partes[0] + "Insumos\\Bruto (v1)"
 path_output = partes[0] + "Insumos\\Semi-tratado (v2)"
 
+# --- #
+
 # 1.0. Importando os datasets de Combustivel automotivo
 
 # Define o caminho base para os arquivos
@@ -45,7 +47,7 @@ for year in range(2020, 2024):
         dict_GLP_P13[file_name] = (
             pd.read_csv(full_path, sep=";", encoding='utf-8-sig'))
 
-# 1.2. Importando os datasets de Cotacao dolar
+# 1.2. Importando os datasets de Cotacao
 
 # Define o caminho base para os arquivos
 path_Cotacao = path_insumos + r"\Cotacao"
@@ -204,7 +206,7 @@ for moeda, lista_database in dict_cotacao.items():
         # Armazenar o DataFrame sumarizado no novo dicionário
     dict_cotacao_sumarizado[moeda] = lista_database_moedas_sumarizado
 
-# 2.3. Tratando as bases de de PETR
+# 2.3. Tratando as bases de de Petroleo
 
 dict_petroleo_sumarizado = {}
 
@@ -212,59 +214,118 @@ for petrolifera, lista_database in dict_petroleo.items():
 
     lista_database_petroliferas_sumarizado = []
 
-    for df in lista_database:
+    for index, df in enumerate(lista_database):
+
+        # Definir o nome correto da coluna sem alterar a variável petrolifera
+        if petrolifera == "PETR": 
+            coluna_petrolifera = f'PETR{index + 3}'
+        else:
+            coluna_petrolifera = petrolifera
+        
+        # Definir a moeda correta
+        if petrolifera == "ARAMCO":
+            moeda = "Riyais"
+        else:
+            moeda = "Reais"
 
         # Renomear as colunas pela posição, pq seus nomes estão "quebrados"
         df.columns.values[0] = f"Data da Coleta"
-        df.columns.values[1] = f"Fechamento {petrolifera} (em Reais)"
-        df.columns.values[5] = f"Volume de transações {petrolifera} (Em milhares)"
+        df.columns.values[1] = f"Fechamento {coluna_petrolifera} (em {moeda})"
+        df.columns.values[5] = f"Volume de transações {coluna_petrolifera} (Em milhares)"
         
         # Selecionando as colunas necessárias
         summarized_df = df[[f"Data da Coleta", 
-                            f"Fechamento {petrolifera} (em Reais)", 
-                            f"Volume de transações {petrolifera} (Em milhares)"]]
+                            f"Fechamento {coluna_petrolifera} (em {moeda})", 
+                            f"Volume de transações {coluna_petrolifera} (Em milhares)"]]
 
         # Formatação da coluna "Data da Coleta"
         summarized_df["Data da Coleta"] = pd.to_datetime(summarized_df["Data da Coleta"], format="%d.%m.%Y").dt.strftime("%Y%m%d")
 
         # Remover letras e converter a coluna "Volume de transações" para float
-        summarized_df[f"Volume de transações {petrolifera} (Em milhares)"] = (
-            summarized_df[f"Volume de transações {petrolifera} (Em milhares)"]
+        summarized_df[f"Volume de transações {coluna_petrolifera} (Em milhares)"] = (
+            summarized_df[f"Volume de transações {coluna_petrolifera} (Em milhares)"]
             .str.replace(r'[^\d,]', '', regex=True)  # Remove letras
             .str.replace(',', '.')  # Troca vírgula por ponto
             .astype(float)  # Converte para float
         )
 
         # Converter a coluna "Fechamento {df_name} (em Reais)" para float
-        summarized_df[f"Fechamento {petrolifera} (em Reais)"] = (
-            summarized_df[f"Fechamento {petrolifera} (em Reais)"]
+        summarized_df[f"Fechamento {coluna_petrolifera} (em {moeda})"] = (
+            summarized_df[f"Fechamento {coluna_petrolifera} (em {moeda})"]
             .str.replace(',', '.')  # Troca vírgula por ponto
             .astype(float)  # Converte para float
         )
 
         lista_database_petroliferas_sumarizado.append(summarized_df)
     
-    dict_petroleo_sumarizado[petrolifera] = lista_database_petroliferas_sumarizado
-    
-# 3.0. Concatenando todos os dataframes verticalmente
+    # Caso seja PETR3 ou PETR4, ele vai colocar como PETR
+    if petrolifera == "PETR":
+        petrolifera_key = "PETR"
+    else:
+        petrolifera_key = petrolifera
 
+    dict_petroleo_sumarizado[petrolifera_key] = lista_database_petroliferas_sumarizado
+
+''' Foi escolhido não fazer a conversão, dado que o número de datas sem Cotacao do Riyal é alta
+# Fazendo o cálculo do valor de fechamento da ARAMCO em reais
+for index, row in dict_petroleo_sumarizado['ARAMCO'][0].iterrows():
+    data_coleta = row['Data da Coleta']
+    
+    # Inicialize matching_row como None
+    matching_row = None
+    
+    # Encontrar a linha correspondente na cotação do riyal
+    for semestre, dataframe in enumerate(dict_cotacao_sumarizado['Cotacao riyal']):
+        matching_rows = dataframe[dataframe['Data da Coleta'] == data_coleta]
+        if not matching_rows.empty:
+            matching_row = matching_rows.iloc[0]
+            cotacao_riyal = matching_row['Cotação riyal em Real (Venda)']
+            multiplicacao = row['Fechamento ARAMCO (em Reais)'] * cotacao_riyal
+            dict_petroleo_sumarizado['ARAMCO'][0].at[index, 'Fechamento ARAMCO (em Reais)'] = multiplicacao
+'''
+# --- #
+
+# 3.0. Concatenando os dataframes de combustivel
 df_combustivel_concatenado = pd.concat(dict_combustivel_sumarizado.values())
 df_combustivel_concatenado = df_combustivel_concatenado.sort_values(by='Data da Coleta', ascending=True)
 
+# 3.1. Concatenando os dataframes de gás de cozinha
 df_GLP_concatenado = pd.concat(dict_GLP_sumarizado.values())
 df_GLP_concatenado = df_GLP_concatenado.sort_values(by='Data da Coleta', ascending=True)
 
+# 3.2. Concatenando os dataframes de cotacao
+
+# Unindo cada uma das moedas
+dict_cotacao_concatenado = {}
+for moeda, database_list in dict_cotacao_sumarizado.items():
+    dict_cotacao_concatenado[moeda] = pd.concat(database_list, axis=0)
+    dict_cotacao_concatenado[moeda].reset_index(drop=True, inplace=True)
+
+# Unindo todas as moedas
+df_cotacao_concatenado = list(dict_cotacao_concatenado.values())[0]
+for moeda in list(dict_cotacao_concatenado.values())[1:]:
+    df_cotacao_concatenado = pd.merge(df_cotacao_concatenado, moeda, on='Data da Coleta', how='outer')
+
+# 3.3. Concatenando os dataframes de petroleo
+
+# Unindo cada uma das petrolíferas
 dict_petrolifera_concatenado = {}
 for petrolifera, database_list in dict_petroleo_sumarizado.items():
-    dict_petrolifera_concatenado[petrolifera] = pd.concat(database_list, axis=0)
-    dict_petrolifera_concatenado[petrolifera].reset_index(drop=True, inplace=True)
+    concatenated_df = pd.concat(database_list, axis=0)
+    concatenated_df.reset_index(drop=True, inplace=True)
+    dict_petrolifera_concatenado[petrolifera] = concatenated_df
+
+# Unindo todas as petrolíferas
+df_petrolifera_concatenado = list(dict_petrolifera_concatenado.values())[0]
 for petrolifera in list(dict_petrolifera_concatenado.values())[1:]:
-    df_petrolifera_concatenado = pd.merge(df_petrolifera_concatenado, petrolifera, on='key', how='outer')
+    df_petrolifera_concatenado = pd.merge(df_petrolifera_concatenado, petrolifera, on='Data da Coleta', how='outer')
 
-df_cotacao_concatenado = pd.concat(dict_cotacao_sumarizado.values())
-df_cotacao_concatenado = df_cotacao_concatenado.sort_values(by='Data da Coleta', ascending=True)
+# Consolidando os dados para mesclar as datas iguais
+df_petrolifera_concatenado = df_petrolifera_concatenado.groupby('Data da Coleta').first().reset_index()
 
-# 3.1. Tornando tudo em um só DataFrame
+# --- #
+
+# 4.0. Tornando tudo em um só DataFrame
 
 # Criando um DataFrame com o intervalo completo de datas
 datas = pd.date_range(start="2020-01-01", end="2023-12-31", freq='D')
@@ -277,15 +338,14 @@ df_datas['Data da Coleta'] = df_datas['Data da Coleta'].dt.strftime('%Y%m%d')
 df_combustivel_concatenado['Data da Coleta'] = pd.to_datetime(df_combustivel_concatenado['Data da Coleta'], format='%Y%m%d')
 df_GLP_concatenado['Data da Coleta'] = pd.to_datetime(df_GLP_concatenado['Data da Coleta'], format='%Y%m%d')
 df_cotacao_concatenado['Data da Coleta'] = pd.to_datetime(df_cotacao_concatenado['Data da Coleta'], format='%Y%m%d')
-dict_PETR_sumarizado['PETR3 - sumarizado']['Data da Coleta'] = pd.to_datetime(dict_PETR_sumarizado['PETR3 - sumarizado']['Data da Coleta'], format='%Y%m%d')
-dict_PETR_sumarizado['PETR4 - sumarizado']['Data da Coleta'] = pd.to_datetime(dict_PETR_sumarizado['PETR4 - sumarizado']['Data da Coleta'], format='%Y%m%d')
+df_petrolifera_concatenado['Data da Coleta'] = pd.to_datetime(df_petrolifera_concatenado['Data da Coleta'], format='%Y%m%d')
 
 # Convertendo de volta para string após alinhar os formatos
-for df in [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, dict_PETR_sumarizado['PETR3 - sumarizado'], dict_PETR_sumarizado['PETR4 - sumarizado']]:
+for df in [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, df_petrolifera_concatenado]:
     df['Data da Coleta'] = df['Data da Coleta'].dt.strftime('%Y%m%d')
 
 # Realizando a concatenação horizontal com merge
-dfs = [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, dict_PETR_sumarizado['PETR3 - sumarizado'], dict_PETR_sumarizado['PETR4 - sumarizado']]
+dfs = [df_combustivel_concatenado, df_GLP_concatenado, df_cotacao_concatenado, df_petrolifera_concatenado]
 df_final = df_datas
 
 for df in dfs:
